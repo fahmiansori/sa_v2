@@ -9,7 +9,7 @@ class NaiveBayes():
         self.model = None
         # self.preprocess = Preprocessing()
 
-    def builtmodel(self,data,colclas='clas',qc=None):
+    def builtmodel(self,data,colclas='clas',qc=None,logdis=None):
         # data = data['vsm']
         df2 = data['vsm']
         column = data['column']
@@ -18,7 +18,6 @@ class NaiveBayes():
         totalclass = df2[colclas].value_counts()
         if qc:
             qc.processEvents()
-        # clas = df2.clas.unique() #>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>perlu perbaikan, jadikan dinamis
         clas = getattr(df2,colclas)
         clas = clas.unique()
         nulval = df2[colclas].isnull().sum()
@@ -32,6 +31,8 @@ class NaiveBayes():
             totalwordperclas = {}
             totaleachwordperclas = {}
 
+            if logdis != None:
+                logdis.appendPlainText("Counting prior ...")
             for i in clas:
                 prob[i] = totalclass[i]/totaldata
                 dfclas = df2.loc[df2[colclas] == i]
@@ -60,6 +61,8 @@ class NaiveBayes():
             # print(totalwordperclas)
             # print(totaleachwordperclas)
 
+            if logdis != None:
+                logdis.appendPlainText("Counting likelihood ...")
             probeachwordperclas = {}
             #likelihood
             for i in clas:
@@ -76,6 +79,8 @@ class NaiveBayes():
             # print(probeachwordperclas)
 
             model = {'prior':prob,'cond_prob':probeachwordperclas,'clas':clas}
+            # print(prob)
+            # print(probeachwordperclas)
 
             self.model = model
             return model
@@ -86,7 +91,7 @@ class NaiveBayes():
             if preprocess is None:
                 preprocess = Preprocessing()
             sentence = preprocess.process(sentence)
-            sentence_split = sentence.split(" ")
+            sentence_split = sentence['stemmed_text'].split(" ")
 
             clas = {}
             for c in self.model['clas']:
@@ -121,7 +126,7 @@ class NaiveBayes():
             if preprocess is None:
                 preprocess = Preprocessing()
             sentence = preprocess.process(sentence)
-            sentence_split = sentence.split(" ")
+            sentence_split = sentence['stemmed_text'].split(" ")
 
             clas = {}
             for c in model['clas']:
@@ -181,10 +186,11 @@ class NaiveBayes():
 
         return False
 
-    def testclassificationDataframe(self,testdataframe,text_col,clas_col,model=None,qc=None):
+    def testclassificationDataframe(self,testdataframe,text_col,clas_col,model=None,qc=None,logdis=None):
         if model is None:
             model = self.model
-
+        if logdis != None:
+            logdis.appendPlainText("\nEvaluating model ...")
         totaldata = len(testdataframe.index)
         confusionMatrix = {}
         tp = {}
@@ -204,7 +210,8 @@ class NaiveBayes():
             fn[c] = 0
             if qc:
                 qc.processEvents()
-
+        if logdis != None:
+            logdis.appendPlainText("Testing model with data test ...")
         for index,row in testdataframe.iterrows():
             actualclas = row[clas_col]
             testdata_token = row[text_col].split(" ")
@@ -240,9 +247,14 @@ class NaiveBayes():
 
             # print("Test data : ",row[text_col])
             print('Classification : ',argmax,', Actual class : ',actualclas)
+            if logdis != None:
+                logdis.appendPlainText('Classification : '+argmax+', Actual class : '+actualclas)
 
         print("Confusion Matrix")
         print(confusionMatrix)
+        if logdis != None:
+            logdis.appendPlainText('Confusion Matrix')
+            logdis.appendPlainText(str(confusionMatrix))
 
         totalclas = len(model['clas'])
         accuration = 0
@@ -270,22 +282,6 @@ class NaiveBayes():
                 if qc:
                     qc.processEvents()
 
-            # for c in model['clas']:
-            #     print(c,"\t",end='')
-            #     for cc in model['clas']:
-            #         print("\t",confusionMatrix[c][cc],end='')
-            #     print("")
-            #
-            # for c in model['clas']:
-            #     print("tp[c]",c)
-            #     print(tp[c])
-            #     print("fp[c]",c)
-            #     print(fp[c])
-            #     print("fn[c]",c)
-            #     print(fn[c])
-            #     print("tn[c]",c)
-            #     print(tn[c])
-
             for c in model['clas']:
                 # print("tp",c,">",tp[c],"fp",c,">",fp[c],"fn",c,">",fn[c])
                 accuration += (tp[c]+tn[c])/(tp[c]+tn[c]+fp[c]+fn[c]) #1 > kurang lebih benar jika dari percobaan
@@ -301,10 +297,10 @@ class NaiveBayes():
                 if qc:
                     qc.processEvents()
 
-            print("accuration")
-            print(accuration)
             print("totaldata")
             print(totaldata)
+            if logdis != None:
+                logdis.appendPlainText('totaldata : '+str(totaldata))
             # accuration = accuration/totaldata #2
 
             accuration = accuration/totalclas #1
@@ -324,6 +320,11 @@ class NaiveBayes():
             else:
                 pass
 
+        if logdis != None:
+            logdis.appendPlainText('accuration : '+str(accuration))
+            logdis.appendPlainText('precision : '+str(precision))
+            logdis.appendPlainText('recall : '+str(recall))
+
         print("accuration")
         print(accuration)
         print("precision")
@@ -339,8 +340,10 @@ class NaiveBayes():
         return ret
 
 class Vsm():
-    def vsm(self,data,exceptional_feature=[],coltext='text',colclass='clas',qc=None):
+    def vsm(self,data,exceptional_feature=[],coltext='text',colclass='clas',qc=None,logdis=None):
         df = data
+        if logdis != None:
+            logdis.appendPlainText("Splitting text to token ...")
         list_feature = []
         for index,row in df.iterrows():
             text_token = row[coltext].split(" ")
@@ -348,9 +351,13 @@ class Vsm():
             if qc:
                 qc.processEvents()
 
+        if logdis != None:
+            logdis.appendPlainText("Getting unique token ...")
         uniq_feature = set(list_feature)
         uniq_feature = list(uniq_feature)
         column = uniq_feature[:]
+        if logdis != None:
+            logdis.appendPlainText("Creating dataframe for token feature ...")
         featureDf = pd.DataFrame(columns=['feature'])
         text_t = {}
         for i in column:
@@ -367,6 +374,8 @@ class Vsm():
 
         df2 = pd.DataFrame(columns=uniq_feature)
 
+        if logdis != None:
+            logdis.appendPlainText("Counting token frequency  .....")
         for index,row in df.iterrows():
             newdata = {}
             for i in exceptional_feature:

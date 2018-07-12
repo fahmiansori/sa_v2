@@ -159,22 +159,37 @@ class App():
                 if qc:
                     qc.processEvents()
 
-    def builtVSM(self,doFeatureSelection,take_feature,threshold,dataTraining=None,qc=None):
+    def builtVSM(self,doFeatureSelection,take_feature,threshold,dataTraining=None,qc=None,logdis=None,label=None):
         if dataTraining is None:
             dataTraining = self.dataTraining
 
+        if logdis != None:
+            logdis.appendPlainText("\nBuilding VSM ...")
+        if label != None:
+            label.setText("Building VSM ...")
         v = Vsm()
-        vsm = v.vsm(dataTraining,exceptional_feature=self.exceptional_feature,coltext=self.text_col,colclass=self.class_col,qc=qc)
+        vsm = v.vsm(dataTraining,exceptional_feature=self.exceptional_feature,coltext=self.text_col,colclass=self.class_col,qc=qc,logdis=logdis)
         if doFeatureSelection:
+            if label != None:
+                label.setText("Doing feature selection ...")
+            if logdis != None:
+                logdis.appendPlainText("\nDoing feature selection ...")
+                logdis.appendPlainText(str(take_feature)+" - "+str(threshold))
             f = InfoGain()
-            vsm = f.run(vsm,take_feature=take_feature,threshold=threshold,exceptional_feature=self.exceptional_feature,colclas=self.class_col,qc=qc)
+            vsm = f.run(vsm,take_feature=take_feature,threshold=threshold,exceptional_feature=self.exceptional_feature,colclas=self.class_col,qc=qc,logdis=logdis)
+            if logdis != None:
+                logdis.appendPlainText("Feature before : "+str(vsm['featurebeforelen']))
+                logdis.appendPlainText("Feature after : "+str(vsm['columnlen'])+"\n")
+
         return vsm
 
-    def preprocessing(self,doPreprocessing,doFeatureSelection,take_feature,threshold,progress,qc):
+    def preprocessing(self,doPreprocessing,doFeatureSelection,take_feature,threshold,progress,qc,label=None):
         features = None
         if self.con != None:
             if self.training_table:
-                # self.dataTraining = self.con.getDataAsDF(self.training_table)
+                if label != None:
+                    label.setText("Getting data training ...")
+                self.dataTraining = self.con.getDataAsDF(self.training_table)
                 progress.setValue(10)
                 if self.dataTraining is not None:
                     p = Preprocessing(con=self.con)
@@ -184,6 +199,8 @@ class App():
                     originalFeatureCount = 0
                     progressP = 10
                     progressS = (70-progressP)/len(self.dataTraining.index)
+                    if label != None:
+                        label.setText("Preprocessing data training ...")
                     for index,row in self.dataTraining.iterrows():
                         text = row[self.text_col]
 
@@ -212,7 +229,7 @@ class App():
                     qc.processEvents()
                     progress.setValue(80)
 
-                    features['vsm'] = self.builtVSM(doFeatureSelection,take_feature,threshold,qc=qc)
+                    features['vsm'] = self.builtVSM(doFeatureSelection,take_feature,threshold,qc=qc,label=label)
                     features['oritext'] = oritext
                     progress.setValue(90)
             else:
@@ -221,15 +238,45 @@ class App():
 
         return features
 
+    def preprocessingText(self,doPreprocessing,progress,qc):
+        if self.con != None:
+            if self.training_table:
+                self.dataTraining = self.con.getDataAsDF(self.training_table)
+                progress.setValue(1)
+                if self.dataTraining is not None:
+                    p = Preprocessing(con=self.con)
+                    progressP = 1
+                    progressS = (99-progressP)/len(self.dataTraining.index)
+                    for index,row in self.dataTraining.iterrows():
+                        text = row[self.text_col]
+
+                        if doPreprocessing:
+                            pretext = p.process(text)
+                            pretext = pretext['stemmed_text']
+                        else:
+                            pretext = p.processNoPre(text)
+
+                        self.dataTraining.at[index,self.text_col] = pretext
+                        progressP+=progressS
+                        progress.setValue(progressP)
+                        qc.processEvents()
+                    qc.processEvents()
+                    progress.setValue(99)
+            else:
+                print("No training table!")
+        progress.setValue(100)
+
     def trainingClassificator(self,vsm,qc=None):
         self.classificator = NaiveBayes()
         vsm = vsm['vsm']
         model = self.classificator.builtmodel(vsm,qc=qc)
         return model
 
-    def trainingClassificatorEval(self,vsm,qc=None):
+    def trainingClassificatorEval(self,vsm,qc=None,logdis=None):
+        if logdis != None:
+            logdis.appendPlainText("\nTraining model ...")
         classificator = NaiveBayes()
-        classificator.builtmodel(vsm,qc=qc)
+        classificator.builtmodel(vsm,qc=qc,logdis=logdis)
         return classificator
 
     def getDataTrainingProperty(self,clas):
@@ -249,19 +296,26 @@ class App():
             return ret
         return False
 
+    def getDataTrainingCount(self):
+        if self.dataTraining is not None:
+            return len(self.dataTraining.index)
+        return False
+
     def evalSentence(self,model,sentence):
         return self.classificator.classifyWithModel(model,sentence,Preprocessing(con=self.con))
 
-    def evalKFoldCV(self,totaltrainingdata,folds,vsm=None,qc=None):
+    def evalKFoldCV(self,totaltrainingdata,folds,doFeatureSelection,numFeatureToRetain,thresholdFeatureIgnore,qc=None,stat=None,logdis=None):
         if self.dataTraining is not None:
             dataLeft = totaltrainingdata%folds
             dataPerFold = floor(totaltrainingdata/folds)
             dataIndexFolds = []
             foldPos = 1
             dataPos = 1
+            stat.setText("Counting folds ...")
             if qc:
                 qc.processEvents()
             for i in range(totaltrainingdata):
+                logdis.appendPlainText("Adding data index to fold "+str(foldPos)+" ...")
                 if dataPos == 1:
                     newFold = []
                 if dataPos <= dataPerFold:
@@ -278,6 +332,7 @@ class App():
                     qc.processEvents()
 
             if dataLeft > 0:
+                logdis.appendPlainText("\nAdding data left to folds ...\n")
                 indexToAdd = 0
                 for i in range((totaltrainingdata-dataLeft),totaltrainingdata):
                     dataIndexFolds[indexToAdd].append(i)
@@ -287,6 +342,9 @@ class App():
 
             evalResults = []
             for i in range(folds):
+                stat.setText("Processing fold "+str(i)+" ...")
+                logdis.appendPlainText("\n\n\nProcessing k="+str(i)+" ...\n")
+                logdis.appendPlainText("Getting data training and data testing ...")
                 dataIndexFolds_copy = list(dataIndexFolds)
                 testData = self.dataTraining.iloc[dataIndexFolds_copy[i]]
                 del dataIndexFolds_copy[i]
@@ -296,12 +354,9 @@ class App():
                     if qc:
                         qc.processEvents()
                 trainingData = self.dataTraining.iloc[trainingDataList]
-                if vsm:
-                    vsmTraining = vsm
-                else:
-                    vsmTraining = self.builtVSM(False,0,0,dataTraining=trainingData)
-                model = self.trainingClassificatorEval(vsmTraining,qc=qc)
-                evalResult = model.testclassificationDataframe(testData,self.text_col,self.class_col,qc=qc)
+                vsmTraining = self.builtVSM(doFeatureSelection,numFeatureToRetain,thresholdFeatureIgnore,dataTraining=trainingData,qc=qc,logdis=logdis)
+                model = self.trainingClassificatorEval(vsmTraining,qc=qc,logdis=logdis)
+                evalResult = model.testclassificationDataframe(testData,self.text_col,self.class_col,qc=qc,logdis=logdis)
                 evalResults.append(evalResult)
                 if qc:
                     qc.processEvents()
@@ -324,6 +379,8 @@ class App():
             ret['accuration'] = float(format(avg_accuration,'.2f'))*100
             ret['precision'] = float(format(avg_precision,'.2f'))
             ret['recall'] = float(format(avg_recall,'.2f'))
+
+            logdis.appendPlainText("\n ############################################### \n\n")
 
             # print(dataIndexFolds)
             return ret

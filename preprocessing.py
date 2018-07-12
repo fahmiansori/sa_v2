@@ -15,6 +15,11 @@ class Preprocessing():
         if con is not None:
             self.con = con
             unfixWord = self.con.query(sql)
+        else:
+            from db import Database
+            self.con = Database()
+            self.con.connect('localhost','root','','sentiment_analysis')
+            unfixWord = self.con.query(sql)
         # else:
         #     self.con = pymysql.connect(host='localhost', user='root', passwd='', database='sentiment_analysis',charset='utf8')
         #     cursor = self.con.cursor()
@@ -113,18 +118,34 @@ class Preprocessing():
         cleantext = ' '.join(cleantext)
         return cleantext
 
-    def process(self,text):
+    def process(self,text,logdis=None):
+        # print("Original text : ",text)
         start_time = time.time()
+        if logdis != None:
+            logdis.appendPlainText("Cleaning symbols ...")
         # 1 Symbol removal & casefolding
         text = self.removesymbol(text)
+        # print(text)
+        if logdis != None:
+            logdis.appendPlainText("Creating token from text ...")
         # 2 Tokenize
         token_text = self.tokenize(text)
+        # print(token_text)
+        if logdis != None:
+            logdis.appendPlainText("Fixing token ...")
         # 2.1 Check in dict db if any abbreviation(singkatan)
         fixedword = self.fixword(token_text)
+        # print(fixedword)
+        if logdis != None:
+            logdis.appendPlainText("Deleting stopword ...")
         # 3 Stopword removal
         removedstopword_text = self.removestopword(fixedword)
+        # print(removedstopword_text)
+        if logdis != None:
+            logdis.appendPlainText("Stemming ...")
         # 4 stemmer
         stemmed_text = self.stemming(removedstopword_text)
+        # print(stemmed_text)
         # 5 Feature selection & TF-IDF
 
         # result = stemmed_text
@@ -134,13 +155,15 @@ class Preprocessing():
         # print("--- %s seconds ---" % (time.time() - start_time))
         return res
 
-    def processNoPre(self,text):
+    def processNoPre(self,text,logdis=None):
         start_time = time.time()
+        if logdis != None:
+            logdis.appendPlainText("Cleaning symbols ...")
         text = self.removesymbol(text)
 
         return text
 
 
-# t = "sy suka dengan dia, namun dia tidak suka dengan saya dan dia, sangat mendebarkan @jokowi 2 periode"
+# t = "sy engga suka dgn dia, selalu melakukan pencitraan!"
 # p = Preprocessing()
 # print(p.process(t))

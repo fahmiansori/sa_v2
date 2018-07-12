@@ -33,7 +33,7 @@ class InfoGain():
         en = {'i':i,'prob':prob}
         return en
 
-    def gain(self,S,clas,totaldata,s,qc=None):
+    def gain(self,S,clas,totaldata,s,qc=None,logdis=None):
         entropyClass = self.entropy(clas,s,qc=qc)
 
         igSubset = {}
@@ -56,7 +56,7 @@ class InfoGain():
         #     print(i,":",igSubset[i])
         return igSubset
 
-    def run(self,data,take_feature=0,threshold=0,exceptional_feature=[],colclas='clas',qc=None):
+    def run(self,data,take_feature=0,threshold=0,exceptional_feature=[],colclas='clas',qc=None,logdis=None):
         cols = []
         take_feature=int(take_feature)
         threshold=float(threshold)
@@ -70,6 +70,8 @@ class InfoGain():
         nulval = dataframe[colclas].isnull().sum()
 
         if totalclass.empty or nulval > 0:
+            if logdis != None:
+                logdis.appendPlainText("There are an empty class or more in training data! Please check your data.")
             print("There are an empty class or more in training data! Please check your data.")
         else:
             for i in columns:
@@ -78,6 +80,8 @@ class InfoGain():
                 if qc:
                     qc.processEvents()
 
+            if logdis != None:
+                logdis.appendPlainText("Counting value of feature ...")
             S = {}
             for i in cols:
                 category = {}
@@ -114,6 +118,8 @@ class InfoGain():
                 if qc:
                     qc.processEvents()
             s = ss
+            if logdis != None:
+                logdis.appendPlainText("Counting features IG ...")
             igSubset = self.gain(S,clas,totaldata,ss,qc=qc)
 
             so = sorted(igSubset,key=igSubset.__getitem__,reverse=True)
@@ -123,6 +129,9 @@ class InfoGain():
             featureDf = pd.DataFrame(columns=['feature','ig'])
             text_t = {}
             for i in so:
+                if logdis != None:
+                    logdis.appendPlainText(str(num)+". "+i+" : "+str(igSubset[i]))
+                # print("threshold & take : ",str(threshold),str(take_feature))
                 if igSubset[i] > threshold and num <= take_feature or take_feature == 0 and threshold == 0 or take_feature == 0 and igSubset[i] > threshold or num <= take_feature and threshold == 0:
                     column.append(i)
                     text_t['feature'] = i
@@ -130,18 +139,22 @@ class InfoGain():
                     featureDf = featureDf.append(text_t,ignore_index=True)
                     # print(num,".",i,":",igSubset[i])
                 else:
+                    print("threshold & take : ",str(threshold),str(take_feature))
+                    print("This feature will be deleted .................")
                     feature_to_delete.append(i)
                 num+=1
                 if qc:
                     qc.processEvents()
             columnlen = len(column)
             if len(feature_to_delete) > 0:
+                if logdis != None:
+                    logdis.appendPlainText("Deleting features ...")
                 for i in feature_to_delete:
                     dataframe.drop(i,axis=1,inplace=True) # axis = 1->kolom,0->rows,inplace=True->no asignment
                     if qc:
                         qc.processEvents()
 
-            vs_model = {'vsm':dataframe,'column':column,'columnlen':columnlen,'feature':featureDf}
+            vs_model = {'vsm':dataframe,'column':column,'columnlen':columnlen,'feature':featureDf, 'featurebeforelen':len(so)}
             return vs_model
 
         return False
