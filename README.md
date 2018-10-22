@@ -1,3 +1,3 @@
-# sa_v2
+# sentimen_analysis
 Lib : pandas, pyqt5, pymysql.
 Run ui.py to run program.
